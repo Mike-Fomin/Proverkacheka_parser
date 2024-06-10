@@ -1,12 +1,11 @@
-import concurrent.futures
 import json
-from tqdm import tqdm
-
 import os
 import requests
 import traceback
 
 from bs4 import BeautifulSoup
+from datetime import datetime
+from tqdm.auto import tqdm
 
 HEADERS: dict = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
@@ -137,6 +136,7 @@ def parse_check(url: str, item: dict) -> dict:
 def get_all_checks_list(page: int) -> list[BeautifulSoup]:
     try:
         response: requests.Response = requests.get(url=f'https://proverkacheka.com/check&p={page}', headers=HEADERS)
+        print(f"Page {page}: status {response.status_code}")
 
         soup: BeautifulSoup = BeautifulSoup(response.text, 'lxml')
         main_block: BeautifulSoup = soup.find('div', class_='col-md-9')
@@ -147,6 +147,7 @@ def get_all_checks_list(page: int) -> list[BeautifulSoup]:
     except:
         print(f"Page {page} error!")
         traceback.print_exc()
+        return page
     else:
         return list(filter(lambda x: not x.get('class'), data_rows))
 
@@ -155,53 +156,60 @@ def main() -> None:
     all_items: list = []
     existed_items: list = []
 
-    if os.path.exists('all_items.json'):
-        print('Считываются данные из файла...')
-        with open('all_items.json', 'r', encoding='utf-8') as full_file:
-            all_items: list = json.load(full_file)
+    for file in os.listdir():
+        if file.startswith('all_items'):
+            print('Считываются данные из файла...')
+            with open(file=file, mode='r', encoding='utf-8') as full_file:
+                items_from_file: list = json.load(full_file)[:10]
 
-        print('Данные успешно прочитаны...')
-        existed_items: list = [ex['checkID'] for ex in all_items]
+            print('Данные успешно прочитаны...')
+            existed_items: list = [ex['checkID'] for ex in items_from_file]
+            break
 
-    all_checks: list = []
-    print('Парсинг всех страниц с чеками...')
+    bad_pages: list = []
+    check_ids: list = []
+    break_flag: bool = False
 
-    with tqdm(desc='Сохранение страниц с чеками:', total=10) as pbar1:
+    for page in range(1, 11):
+        page_result = get_all_checks_list(page)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as page_executor:
-            page_futures: list = [page_executor.submit(get_all_checks_list, page) for page in range(1, 11)]
+        if isinstance(page_result, list):
 
-            for page_future in concurrent.futures.as_completed(page_futures):
-                result = page_future.result()
-                pbar1.update(1)
-                if result:
-                    all_checks.extend(result)
+            for html_check in tqdm(page_result):
 
-    futures: list = []
-
-    with tqdm(desc='Парсинг чеков:', total=len(all_checks)) as pbar2:
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=25) as executor:
-            for check in all_checks:
-                if not check.get('class'):
-                    link: str = URL + check.find('a').get('href')
-                    data: list = check.find_all('td')
+                if not html_check.get('class'):
+                    link: str = URL + html_check.find('a').get('href')
+                    data: list = html_check.find_all('td')
                     check_number: int = int(data[0].text.strip())
                     item: dict = {
                         'checkID': check_number
                     }
-                    if item['checkID'] not in existed_items:
-                        task = executor.submit(parse_check, link, item)
-                        futures.append(task)
 
-            for f in concurrent.futures.as_completed(futures):
-                res = f.result()
-                pbar2.update(1)
-                if res:
-                    all_items.append(res)
+                    if item['checkID'] not in check_ids:
+                        check_ids.append(item['checkID'])
+                    else:
+                        continue
+
+                    if item['checkID'] not in existed_items:
+                        res = parse_check(link, item)
+                        if res:
+                            all_items.append(res)
+                    else:
+                        break_flag: bool = True
+                        break
+        else:
+            bad_pages.append(page_result)
+
+        check_ids: list = check_ids[-25:]
+
+        if break_flag:
+            print('Достигнут чек из предыдущего парсинга!')
+            break
+
+    all_items.sort(key=lambda x: x['checkID'], reverse=True)
 
     print(f"Сохранение в файл...")
-    with open('all_items.json', 'w', encoding='utf-8') as file:
+    with open(f"all_items_{datetime.now().strftime('%d_%m_%Y_time_%H_%M')}.json", "w", encoding="utf-8") as file:
         json.dump(all_items, file, indent=4, ensure_ascii=False)
 
     print(f"Парсинг успешно завершен!")
