@@ -1,5 +1,8 @@
 import json
 import os
+import random
+import time
+
 import requests
 import traceback
 
@@ -154,23 +157,20 @@ def get_all_checks_list(page: int) -> list[BeautifulSoup]:
 
 def main() -> None:
     all_items: list = []
-    existed_items: list = []
+    max_value_item: int = 0
 
-    for file in os.listdir():
-        if file.startswith('all_items'):
-            print('Считываются данные из файла...')
-            with open(file=file, mode='r', encoding='utf-8') as full_file:
-                items_from_file: list = json.load(full_file)[:10]
+    if os.path.exists('today.json'):
+        print('Считываются данные из файла...')
+        with open('today.json', mode='r', encoding='utf-8') as full_file:
+            last_item_from_file: dict = json.load(full_file)[0]
 
-            print('Данные успешно прочитаны...')
-            existed_items: list = [ex['checkID'] for ex in items_from_file]
-            break
+        print('Данные успешно прочитаны...')
+        max_value_item: int = last_item_from_file['checkID']
 
-    bad_pages: list = []
     check_ids: list = []
     break_flag: bool = False
 
-    for page in range(1, 11):
+    for page in range(1, 2001):
         page_result = get_all_checks_list(page)
 
         if isinstance(page_result, list):
@@ -190,15 +190,15 @@ def main() -> None:
                     else:
                         continue
 
-                    if item['checkID'] not in existed_items:
+                    if item['checkID'] > max_value_item:
                         res = parse_check(link, item)
                         if res:
                             all_items.append(res)
                     else:
                         break_flag: bool = True
                         break
-        else:
-            bad_pages.append(page_result)
+
+                    time.sleep(random.random() * 0.5)
 
         check_ids: list = check_ids[-25:]
 
@@ -209,10 +209,14 @@ def main() -> None:
     all_items.sort(key=lambda x: x['checkID'], reverse=True)
 
     print(f"Сохранение в файл...")
-    with open(f"all_items_{datetime.now().strftime('%d_%m_%Y_time_%H_%M')}.json", "w", encoding="utf-8") as file:
-        json.dump(all_items, file, indent=4, ensure_ascii=False)
+    with open(f"all_items_{datetime.now().strftime('%d_%m_%Y')}.json", "w", encoding="utf-8") as file1:
+        json.dump(all_items, file1, indent=4, ensure_ascii=False)
+
+    with open("today.json", "w", encoding="utf-8") as file2:
+        json.dump(all_items, file2, indent=4, ensure_ascii=False)
 
     print(f"Парсинг успешно завершен!")
+    print(f"Итоговое количество чеков = {len(all_items)}")
 
 
 if __name__ == '__main__':
