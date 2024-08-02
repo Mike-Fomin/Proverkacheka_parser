@@ -51,7 +51,9 @@ def parse_check(url: str, item: dict) -> dict:
         rows: list = table.find_all('tr')
 
         for key, value in zip(TOP_TITLES_KEYS, filter(lambda x: x.text.strip(), rows[:9])):
-            value = value.text.strip()
+            key: str
+            value: BeautifulSoup
+            value: str = value.text.strip()
 
             if key == 'userInn':
                 value: str = value.replace('ИНН ', '')
@@ -69,10 +71,15 @@ def parse_check(url: str, item: dict) -> dict:
         sell: list = [data.find_all('td') for data in rows[10:] if data.get('class')[0] == 'b-check_item']
         gap: int = len(sell)
 
-        sell_elems: list = []
+        sell_elements: list = []
         for sell_item in sell:
+            sell_item: list
+
             elem: dict = {}
             for key, value in zip(SELLED_TITLES_KEYS, sell_item):
+                key: str
+                value: BeautifulSoup
+
                 value = value.text.strip()
 
                 if key == 'positionNumber':
@@ -82,11 +89,14 @@ def parse_check(url: str, item: dict) -> dict:
 
                 elem[key] = value
 
-            sell_elems.append(elem)
+            sell_elements.append(elem)
 
-        item['items'] = sell_elems
+        item['items'] = sell_elements
 
         for key, value in zip(BOTTOM_TITLES_KEYS, rows[10 + gap:13 + gap]):
+            key: str
+            value: BeautifulSoup
+
             value: str = ' '.join(map(lambda x: x.text.strip(), value.find_all('td')))
             value = value.replace('  ', ' ')
 
@@ -102,6 +112,7 @@ def parse_check(url: str, item: dict) -> dict:
             item[key] = value
 
         for data in rows[13 + gap:]:
+            data: BeautifulSoup
             elem: str = data.text.strip()
             if elem.startswith('ВИД НАЛОГООБЛОЖЕНИЯ'):
                 item['appliedTaxationType'] = elem.replace('ВИД НАЛОГООБЛОЖЕНИЯ: ', '')
@@ -171,6 +182,7 @@ def main() -> None:
     break_flag: bool = False
 
     for page in range(1, 2001):
+        page: int
         page_result = get_all_checks_list(page)
 
         if isinstance(page_result, list):
@@ -209,10 +221,10 @@ def main() -> None:
     all_items.sort(key=lambda x: x['checkID'], reverse=True)
 
     print(f"Сохранение в файл...")
-    with open(f"all_items_{datetime.now().strftime('%d_%m_%Y')}.json", "w", encoding="utf-8") as file1:
+    with open(f"files/all_items_{datetime.now().strftime('%d_%m_%Y')}.json", "w", encoding="utf-8") as file1:
         json.dump(all_items, file1, indent=4, ensure_ascii=False)
 
-    with open("today.json", "w", encoding="utf-8") as file2:
+    with open("files/today.json", "w", encoding="utf-8") as file2:
         json.dump(all_items, file2, indent=4, ensure_ascii=False)
 
     print(f"Парсинг успешно завершен!")
